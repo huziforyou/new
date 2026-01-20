@@ -22,16 +22,14 @@ const darkMapStyle = [
 ];
 
 const getMarkerIcon = (email) => {
-  // Simple hash to color or just random colors, or specific mapping if possible.
-  // For now, let's use a default blue dot. 
-  // Ideally we generate a color based on email string to be consistent.
   let hash = 0;
   for (let i = 0; i < email.length; i++) {
     hash = email.charCodeAt(i) + ((hash << 5) - hash);
   }
   const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
   const hex = "00000".substring(0, 6 - c.length) + c;
-  return `http://chart.apis.google.com/chart?chst=d_map_pin_letter&chld=%E2%80%A2|${hex}`;
+  // ✅ CHANGED: Use HTTPS to avoid mixed content issues
+  return `https://chart.apis.google.com/chart?chst=d_map_pin_letter&chld=%E2%80%A2|${hex}`;
 };
 
 const Home = () => {
@@ -58,37 +56,30 @@ const Home = () => {
   useEffect(() => {
     let isMounted = true;
     const fetchImages = async () => {
+      if (!token) return;
       try {
-        setMapReady(false); // Optional: show loading state if needed, or just let markers pop in
-        // 1. Get Allowed Emails (The "New" Dynamic Source)
+        setMapReady(false);
         const emailsRes = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        // Ensure we filter out any null/undefined emails and lowercase them
         const allowedEmails = emailsRes.data
           .map(e => e.email ? e.email.toLowerCase() : null)
           .filter(Boolean);
 
         let emailsToFetch = [];
 
-        // 2. Filter based on permissions (Strict "By Email" Logic)
         if (user?.role === 'admin') {
-          // Admin sees ALL allowed emails
           emailsToFetch = allowedEmails;
         } else {
-          // Users see ONLY emails they have explicit permission for
           const userPerms = (user?.permissions || []).map(p => p ? p.toLowerCase() : "");
           emailsToFetch = allowedEmails.filter(email => userPerms.includes(email));
         }
 
-        // 3. Filter based on UI selection (Dropdown)
         if (selectedFilter !== 'All') {
           const selectedLower = selectedFilter.toLowerCase();
-          // If selected filter is valid and permitted
           if (emailsToFetch.includes(selectedLower)) {
             emailsToFetch = [selectedLower];
           } else {
-            // If user selects something they shouldn't have access to, fetch nothing
             if (isMounted) setImages([]);
             return;
           }
@@ -96,7 +87,6 @@ const Home = () => {
 
         console.log("Fetching images for:", emailsToFetch);
 
-        // 4. Fetch images for each authorized email in parallel
         const validImages = [];
 
         await Promise.all(emailsToFetch.map(async (email) => {
@@ -104,7 +94,7 @@ const Home = () => {
             const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/photos/getImages/${email}`, {
               headers: { Authorization: `Bearer ${token}` }
             });
-            const emailImages = res.data.photos.map(img => ({
+            const emailImages = (res.data.photos || []).map(img => ({
               ...img,
               emailKey: email,
               url: `${import.meta.env.VITE_BASE_URL}/photos/image-data/${img._id}`,
@@ -116,8 +106,13 @@ const Home = () => {
           }
         }));
 
-        // Filter out images without valid coordinates to prevent map errors
-        const filteredImages = validImages.filter(img => img.latitude && img.longitude);
+        // ✅ MODIFIED: Robust filtering for coordinates (include 0)
+        const filteredImages = validImages.filter(img =>
+          img.latitude !== null && img.latitude !== undefined &&
+          img.longitude !== null && img.longitude !== undefined
+        );
+
+        console.log(`✅ Found ${validImages.length} images total, ${filteredImages.length} with GPS.`);
 
         if (isMounted) {
           setImages(filteredImages);
@@ -134,7 +129,7 @@ const Home = () => {
     }
 
     return () => { isMounted = false; };
-  }, [user, selectedFilter]);
+  }, [user, selectedFilter, token]);
 
   // Dynamic filters
   const [availableFilters, setAvailableFilters] = useState(['All']);
@@ -160,10 +155,21 @@ const Home = () => {
     if (user) loadFilters();
   }, [user]);
 
-  // Removed permissions logic from here as it is handled in useEffect state
-  // const filters = ['All']; ...
+  // ✅ CHANGED: Safer heatmap data generation to avoid "google is not defined" errors
+  const [heatmapData, setHeatmapData] = useState([]);
 
-  const heatmapData = images.map(img => new window.google.maps.LatLng(img.latitude, img.longitude));
+  useEffect(() => {
+    if (mapReady && window.google && images.length > 0) {
+      try {
+        const data = images.map(img => new window.google.maps.LatLng(img.latitude, img.longitude));
+        setHeatmapData(data);
+      } catch (e) {
+        console.error("Heatmap data error:", e);
+      }
+    } else {
+      setHeatmapData([]);
+    }
+  }, [images, mapReady]);
 
   return (
     <div className="h-screen w-full relative">
@@ -172,14 +178,14 @@ const Home = () => {
         <select
           value={selectedFilter}
           onChange={(e) => setSelectedFilter(e.target.value)}
-          className="border px-3 py-1 dark:bg-zinc-800 bg-white dark:text-white text-black text-center rounded text-sm"
+          className="border px-3 py-1 dark:bg-zinc-800 bg-white dark:text-white text-black text-center rounded text-sm shadow-lg"
         >
           {availableFilters.map(f => <option key={f} value={f}>{f}</option>)}
         </select>
 
         <button
           onClick={() => setShowHeatmap(!showHeatmap)}
-          className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+          className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm shadow-lg"
         >
           {showHeatmap ? 'Hide Heatmap' : 'Show Heatmap'}
         </button>
@@ -192,7 +198,10 @@ const Home = () => {
           mapContainerStyle={containerStyle}
           center={mapCenter}
           zoom={mapZoom}
-          onLoad={() => setMapReady(true)}
+          onLoad={() => {
+            console.log("📍 Google Map Loaded Successfully");
+            setMapReady(true);
+          }}
           options={{
             styles: isDarkMode ? darkMapStyle : undefined,
             disableDefaultUI: false,
@@ -203,9 +212,11 @@ const Home = () => {
           {/* Markers */}
           {mapReady && images.map((img, index) => (
             <Marker
-              // ✅ CHANGED: Use `img._id` for a more reliable unique key
               key={img._id || index}
-              position={{ lat: img.latitude, lng: img.longitude }}
+              position={{
+                lat: Number(img.latitude),
+                lng: Number(img.longitude)
+              }}
               onClick={() => setSelectedImage({ ...img, zoom: false })}
               icon={img.icon}
             />
@@ -213,7 +224,7 @@ const Home = () => {
 
           {/* Heatmap */}
           {mapReady && showHeatmap && heatmapData.length > 0 && (
-            <HeatmapLayer data={heatmapData} options={{ radius: 50 }} />
+            <HeatmapLayer data={heatmapData} options={{ radius: 30 }} />
           )}
 
           {/* InfoWindow with Zoom + Preview */}
