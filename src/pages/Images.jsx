@@ -2,8 +2,10 @@ import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { IoClose } from 'react-icons/io5';
 import { Link } from 'react-router-dom';
+import { useUser } from '../Context/UserContext';
 
 const Images = () => {
+  const { token } = useUser();
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -13,10 +15,12 @@ const Images = () => {
   const [zoom, setZoom] = useState(1);
 
   const getImages = async () => {
+    if (!token) return;
     try {
       setLoading(true);
-      // ✅ Aapka yeh logic pehle se hi theek tha!
-      const response = await axios.get(`${import.meta.env.VITE_BASE_URL}/photos/get-photos`);
+      const response = await axios.get(`${import.meta.env.VITE_BASE_URL}/photos/get-photos`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (response.status === 200) {
         setPhotos(response.data.photos || []);
       }
@@ -29,7 +33,7 @@ const Images = () => {
 
   useEffect(() => {
     getImages();
-  }, []);
+  }, [token]);
 
   const openPreviewModal = (photo) => {
     const imageUrl = `${import.meta.env.VITE_BASE_URL}/photos/image-data/${photo._id}`;
@@ -100,9 +104,8 @@ const Images = () => {
       {previewImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70" onClick={() => setPreviewImage(null)}>
           <div
-            className={`relative flex items-center justify-center w-[90vw] h-[90vh] max-w-4xl max-h-4xl ${
-              isFullscreen ? "w-screen h-screen max-w-full max-h-full" : ""
-            }`}
+            className={`relative flex items-center justify-center w-[90vw] h-[90vh] max-w-4xl max-h-4xl ${isFullscreen ? "w-screen h-screen max-w-full max-h-full" : ""
+              }`}
             onClick={(e) => e.stopPropagation()}
           >
             <IoClose size={32} onClick={() => setPreviewImage(null)} className="absolute top-2 right-2 text-white cursor-pointer z-20 bg-black/50 rounded-full p-1" />
