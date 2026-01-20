@@ -27,9 +27,18 @@ const getMarkerIcon = (email) => {
     hash = email.charCodeAt(i) + ((hash << 5) - hash);
   }
   const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
-  const hex = "00000".substring(0, 6 - c.length) + c;
-  // ✅ CHANGED: Use HTTPS to avoid mixed content issues
-  return `https://chart.apis.google.com/chart?chst=d_map_pin_letter&chld=%E2%80%A2|${hex}`;
+  const hex = "#" + ("00000".substring(0, 6 - c.length) + c);
+
+  // Custom SVG Marker (more reliable than external APIs)
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="40" viewBox="0 0 30 40">
+    <path fill="${hex}" stroke="#FFFFFF" stroke-width="1.5" d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 25 15 25s15-14.5 15-25c0-8.3-6.7-15-15-15z"/>
+    <circle fill="#FFFFFF" cx="15" cy="15" r="5"/>
+  </svg>`;
+
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+    scaledSize: new window.google.maps.Size(30, 40)
+  };
 };
 
 const Home = () => {
@@ -52,82 +61,88 @@ const Home = () => {
     return () => observer.disconnect();
   }, []);
 
-  // ✅ CHANGED: Fetch allowed emails and then their images
+  // ✅ CHANGED: Improved fetch logic with better debugging and coordinate handling
   useEffect(() => {
     let isMounted = true;
     const fetchImages = async () => {
-      if (!token) return;
+      if (!token || !user) return;
+
       try {
-        setMapReady(false);
+        console.log("📍 [Home] Starting image fetch...");
+
+        // 1. Get Allowed Emails
         const emailsRes = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        const allowedEmails = emailsRes.data
-          .map(e => e.email ? e.email.toLowerCase() : null)
+
+        const allSources = emailsRes.data || [];
+        const allowedEmails = allSources
+          .map(e => (typeof e === 'string' ? e : e.email)?.toLowerCase())
           .filter(Boolean);
 
         let emailsToFetch = [];
-
-        if (user?.role === 'admin') {
+        if (user.role === 'admin') {
           emailsToFetch = allowedEmails;
         } else {
-          const userPerms = (user?.permissions || []).map(p => p ? p.toLowerCase() : "");
+          const userPerms = (user.permissions || []).map(p => p?.toLowerCase());
           emailsToFetch = allowedEmails.filter(email => userPerms.includes(email));
         }
 
         if (selectedFilter !== 'All') {
           const selectedLower = selectedFilter.toLowerCase();
-          if (emailsToFetch.includes(selectedLower)) {
-            emailsToFetch = [selectedLower];
-          } else {
-            if (isMounted) setImages([]);
-            return;
-          }
+          emailsToFetch = emailsToFetch.includes(selectedLower) ? [selectedLower] : [];
         }
 
-        console.log("Fetching images for:", emailsToFetch);
+        if (emailsToFetch.length === 0) {
+          console.log("📍 [Home] No emails to fetch.");
+          if (isMounted) setImages([]);
+          return;
+        }
 
-        const validImages = [];
+        console.log("📍 [Home] Fetching images for:", emailsToFetch);
 
+        const fetchedImages = [];
         await Promise.all(emailsToFetch.map(async (email) => {
           try {
             const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/photos/getImages/${email}`, {
               headers: { Authorization: `Bearer ${token}` }
             });
-            const emailImages = (res.data.photos || []).map(img => ({
+            const photos = res.data.photos || [];
+
+            // Add metadata for marker rendering
+            const mapPhotos = photos.map(img => ({
               ...img,
               emailKey: email,
               url: `${import.meta.env.VITE_BASE_URL}/photos/image-data/${img._id}`,
-              icon: getMarkerIcon(email)
+              // Icon will be generated dynamically once window.google is ready
             }));
-            validImages.push(...emailImages);
+
+            fetchedImages.push(...mapPhotos);
           } catch (innerErr) {
-            console.warn(`Failed to fetch images for ${email}:`, innerErr.message);
+            console.warn(`📍 [Home] Failed to fetch for ${email}:`, innerErr.message);
           }
         }));
 
-        // ✅ MODIFIED: Robust filtering for coordinates (include 0)
-        const filteredImages = validImages.filter(img =>
-          img.latitude !== null && img.latitude !== undefined &&
-          img.longitude !== null && img.longitude !== undefined
-        );
+        // Final coordinate verification
+        const validPhotos = fetchedImages.filter(img => {
+          const lat = parseFloat(img.latitude);
+          const lng = parseFloat(img.longitude);
+          return !isNaN(lat) && !isNaN(lng);
+        });
 
-        console.log(`✅ Found ${validImages.length} images total, ${filteredImages.length} with GPS.`);
+        console.log(`📍 [Home] Success: ${validPhotos.length}/${fetchedImages.length} images have valid GPS.`);
 
         if (isMounted) {
-          setImages(filteredImages);
-          setMapReady(true);
+          setImages(validPhotos);
+          // Don't set mapReady(true) here; let GoogleMap component handle it
         }
 
       } catch (err) {
-        console.error("Error fetching home images", err);
+        console.error("📍 [Home] Fetch error:", err);
       }
     };
 
-    if (user) {
-      fetchImages();
-    }
-
+    fetchImages();
     return () => { isMounted = false; };
   }, [user, selectedFilter, token]);
 
@@ -214,11 +229,11 @@ const Home = () => {
             <Marker
               key={img._id || index}
               position={{
-                lat: Number(img.latitude),
-                lng: Number(img.longitude)
+                lat: parseFloat(img.latitude),
+                lng: parseFloat(img.longitude)
               }}
               onClick={() => setSelectedImage({ ...img, zoom: false })}
-              icon={img.icon}
+              icon={getMarkerIcon(img.uploadedBy || 'default')}
             />
           ))}
 
