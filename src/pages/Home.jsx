@@ -42,7 +42,7 @@ const Home = () => {
   const [mapReady, setMapReady] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [showHeatmap, setShowHeatmap] = useState(false);
-  const { user } = useUser();
+  const { user, token } = useUser();
   const { mapCenter, mapZoom } = useMap();
 
   useEffect(() => {
@@ -56,11 +56,18 @@ const Home = () => {
 
   // ✅ CHANGED: Fetch allowed emails and then their images
   useEffect(() => {
+    let isMounted = true;
     const fetchImages = async () => {
       try {
+        setMapReady(false); // Optional: show loading state if needed, or just let markers pop in
         // 1. Get Allowed Emails (The "New" Dynamic Source)
-        const emailsRes = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`);
-        const allowedEmails = emailsRes.data.map(e => e.email.toLowerCase());
+        const emailsRes = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        // Ensure we filter out any null/undefined emails and lowercase them
+        const allowedEmails = emailsRes.data
+          .map(e => e.email ? e.email.toLowerCase() : null)
+          .filter(Boolean);
 
         let emailsToFetch = [];
 
@@ -70,43 +77,52 @@ const Home = () => {
           emailsToFetch = allowedEmails;
         } else {
           // Users see ONLY emails they have explicit permission for
-          // Normalize user permissions to lowercase for comparison
-          const userPerms = (user?.permissions || []).map(p => p?.toLowerCase());
+          const userPerms = (user?.permissions || []).map(p => p ? p.toLowerCase() : "");
           emailsToFetch = allowedEmails.filter(email => userPerms.includes(email));
         }
 
         // 3. Filter based on UI selection (Dropdown)
         if (selectedFilter !== 'All') {
+          const selectedLower = selectedFilter.toLowerCase();
           // If selected filter is valid and permitted
-          if (emailsToFetch.includes(selectedFilter.toLowerCase())) {
-            emailsToFetch = [selectedFilter.toLowerCase()];
+          if (emailsToFetch.includes(selectedLower)) {
+            emailsToFetch = [selectedLower];
           } else {
-            // If user selects something they shouldn't have access to (UI glitch?), fetch nothing or reset
-            if (selectedFilter !== 'All') emailsToFetch = [];
+            // If user selects something they shouldn't have access to, fetch nothing
+            if (isMounted) setImages([]);
+            return;
           }
         }
 
-        let allImages = [];
-        // 4. Fetch images for each authorized email
-        // This connects to the backend controller which now also enforces these permissions
-        for (const email of emailsToFetch) {
+        console.log("Fetching images for:", emailsToFetch);
+
+        // 4. Fetch images for each authorized email in parallel
+        const validImages = [];
+
+        await Promise.all(emailsToFetch.map(async (email) => {
           try {
-            const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/photos/getImages/${email}`);
+            const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/photos/getImages/${email}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
             const emailImages = res.data.photos.map(img => ({
               ...img,
               emailKey: email,
               url: `${import.meta.env.VITE_BASE_URL}/photos/image-data/${img._id}`,
               icon: getMarkerIcon(email)
             }));
-            allImages.push(...emailImages);
+            validImages.push(...emailImages);
           } catch (innerErr) {
             console.warn(`Failed to fetch images for ${email}:`, innerErr.message);
           }
-        }
+        }));
 
         // Filter out images without valid coordinates to prevent map errors
-        const validImages = allImages.filter(img => img.latitude && img.longitude);
-        setImages(validImages);
+        const filteredImages = validImages.filter(img => img.latitude && img.longitude);
+
+        if (isMounted) {
+          setImages(filteredImages);
+          setMapReady(true);
+        }
 
       } catch (err) {
         console.error("Error fetching home images", err);
@@ -116,6 +132,8 @@ const Home = () => {
     if (user) {
       fetchImages();
     }
+
+    return () => { isMounted = false; };
   }, [user, selectedFilter]);
 
   // Dynamic filters
@@ -124,7 +142,9 @@ const Home = () => {
   useEffect(() => {
     const loadFilters = async () => {
       try {
-        const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`);
+        const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
         const allEmails = res.data.map(e => e.email.toLowerCase());
 
         if (user?.role === 'admin') {

@@ -2,9 +2,11 @@ import axios from "axios";
 import React, { useEffect, useState } from "react";
 import { IoClose } from "react-icons/io5";
 import { useParams } from "react-router-dom";
+import { useUser } from "../Context/UserContext";
 
 const EmailImages = () => {
     const { email } = useParams(); // Get email from URL
+    const { token } = useUser();
     const [photos, setPhotos] = useState([]);
     const [photosByYear, setPhotosByYear] = useState({});
     const [photosByDistrict, setPhotosByDistrict] = useState({});
@@ -20,13 +22,16 @@ const EmailImages = () => {
     const [zoom, setZoom] = useState(1);
 
     const fetchPhotos = async () => {
-        if (!email) return;
+        if (!email || !token) return;
         try {
             setLoading(true);
             // Ensure email is encoded correctly if needed, though simple emails are usually fine
             const res = await axios.get(
                 `${import.meta.env.VITE_BASE_URL}/photos/getImages/${email}`,
-                { withCredentials: true }
+                {
+                    headers: { Authorization: `Bearer ${token}` },
+                    withCredentials: true
+                }
             );
             // Expecting { photos: [...] }
             const rawPhotos = res.data.photos || [];
@@ -34,7 +39,7 @@ const EmailImages = () => {
             // Enrich photos with year and district
             const enrichedPhotos = rawPhotos.map((photo) => ({
                 ...photo,
-                year: new Date(photo.timestamp).getFullYear(),
+                year: photo.timestamp ? new Date(photo.timestamp).getFullYear() : "Unknown",
                 district: photo.district || "Unknown",
             }));
 
@@ -60,7 +65,7 @@ const EmailImages = () => {
 
     useEffect(() => {
         fetchPhotos();
-    }, [email]); // Re-fetch if email changes
+    }, [email, token]); // Re-fetch if email or token changes
 
     const openModal = (title, images) => {
         setModalTitle(title);
@@ -138,7 +143,11 @@ const EmailImages = () => {
                 <p className="text-center text-gray-500">No photos found.</p>
             ) : activeTab === "year" ? (
                 Object.entries(photosByYear)
-                    .sort((a, b) => b[0] - a[0]) // Sort years descending
+                    .sort((a, b) => {
+                        if (a[0] === "Unknown") return 1;
+                        if (b[0] === "Unknown") return -1;
+                        return b[0] - a[0];
+                    }) // Sort years descending
                     .map(([year, yearPhotos]) => (
                         <ImageGrid key={year} title={year} images={yearPhotos} />
                     ))
