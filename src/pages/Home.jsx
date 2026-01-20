@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { GoogleMap, LoadScript, Marker, InfoWindow, HeatmapLayer } from '@react-google-maps/api';
+import { GoogleMap, LoadScript, MarkerF, InfoWindow, HeatmapLayer } from '@react-google-maps/api';
 import axios from 'axios';
 import { useUser } from '../Context/UserContext';
 import { FaDirections, FaTimes } from 'react-icons/fa';
 import { useMap } from '../Context/MapContext';
 
 const containerStyle = { width: '100%', height: '100vh' };
-const pakistanBounds = { north: 37.0, south: 23.5, west: 60.9, east: 77.0 };
+const pakistanBounds = { north: 37.5, south: 23.0, west: 60.5, east: 77.5 };
 
 const darkMapStyle = [
   // ... (your dark map style remains unchanged)
@@ -30,14 +30,15 @@ const getMarkerIcon = (email) => {
   const hex = "#" + ("00000".substring(0, 6 - c.length) + c);
 
   // Custom SVG Marker (more reliable than external APIs)
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="40" viewBox="0 0 30 40">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="48" viewBox="0 0 30 40">
     <path fill="${hex}" stroke="#FFFFFF" stroke-width="1.5" d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 25 15 25s15-14.5 15-25c0-8.3-6.7-15-15-15z"/>
     <circle fill="#FFFFFF" cx="15" cy="15" r="5"/>
   </svg>`;
 
   return {
     url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-    scaledSize: new window.google.maps.Size(30, 40)
+    // Simplified: Don't use window.google.maps.Size if not ready, use object instead
+    scaledSize: window.google?.maps ? new window.google.maps.Size(36, 48) : { width: 36, height: 48, units: 1 }
   };
 };
 
@@ -134,7 +135,6 @@ const Home = () => {
 
         if (isMounted) {
           setImages(validPhotos);
-          // Don't set mapReady(true) here; let GoogleMap component handle it
         }
 
       } catch (err) {
@@ -220,14 +220,14 @@ const Home = () => {
           options={{
             styles: isDarkMode ? darkMapStyle : undefined,
             disableDefaultUI: false,
-            restriction: { latLngBounds: pakistanBounds, strictBounds: true },
+            restriction: { latLngBounds: pakistanBounds, strictBounds: false },
             gestureHandling: 'greedy'
           }}
         >
           {/* Markers */}
           {mapReady && images.map((img, index) => (
-            <Marker
-              key={img._id || index}
+            <MarkerF
+              key={img._id || `marker-${index}`}
               position={{
                 lat: parseFloat(img.latitude),
                 lng: parseFloat(img.longitude)
@@ -245,7 +245,7 @@ const Home = () => {
           {/* InfoWindow with Zoom + Preview */}
           {selectedImage && (
             <InfoWindow
-              position={{ lat: selectedImage.latitude, lng: selectedImage.longitude }}
+              position={{ lat: parseFloat(selectedImage.latitude), lng: parseFloat(selectedImage.longitude) }}
               onCloseClick={() => setSelectedImage(null)}
             >
               <div className="w-fit max-w-sm p-2 rounded-md bg-white shadow-lg relative">
