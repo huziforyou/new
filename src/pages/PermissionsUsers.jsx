@@ -382,7 +382,16 @@ const PermissionsUsers = () => {
                 onChange={(e) => {
                   const newValue = e.target.value.trim();
                   if (!newValue || pages.includes(newValue)) return;
-                  setPages(prev => [...prev, newValue]);
+
+                  let newPages = [...pages, newValue];
+
+                  // Auto-include 'Dashboard' if a sub-dashboard page is selected
+                  const dashboardPages = ['Images', 'Overviews', 'MyInfo', 'Requests', 'Permissions-Users', 'Pending-Users', 'Approved-Users', 'Denied-Users', 'Mail-Management'];
+                  if (dashboardPages.includes(newValue) && !newPages.includes('Dashboard')) {
+                    newPages.push('Dashboard');
+                  }
+
+                  setPages(newPages);
                 }}
                 className='w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 text-sm dark:bg-zinc-900 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all'
               >
@@ -390,6 +399,7 @@ const PermissionsUsers = () => {
 
                 {/* Core Pages Group */}
                 <optgroup label="Dashboard Access">
+                  <option value="Dashboard">Dashboard (Compulsory for Main Access)</option>
                   <option value="Images">Images Gallery</option>
                   <option value="Overviews">Project Overview</option>
                   <option value="MyInfo">User Settings</option>

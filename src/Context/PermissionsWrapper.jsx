@@ -4,51 +4,35 @@ import axios from 'axios';
 import { useUser } from '../Context/UserContext';
 
 const PermissionWrapper = ({ children, required }) => {
-  const { user, loading: userLoading } = useUser(); // Get user and loading state
-  const navigate = useNavigate();
+  const { user, loading } = useUser();
   const location = useLocation();
 
-  const [userRole, setUserRole] = useState(null);
-  const [permissions, setPermissions] = useState([]);
-  const [permLoading, setPermLoading] = useState(true);
+  if (loading) return null;
 
-  useEffect(() => {
-    if (userLoading) return; // Wait for user context to finish loading
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
 
-    if (!user || !user.name) {
-      navigate('/login');
-      return;
+  // Admin has access to everything
+  const hasAccess = user.role === 'admin' || (user.permissions && user.permissions.includes(required));
+
+  if (location.pathname === '/dashboard' || location.pathname === '/dashboard/') {
+    if (user.role === 'admin') return <Navigate to="/dashboard/Overviews" replace />;
+
+    // Redirect to the first available permission that is a sub-page
+    const subPages = ['Overviews', 'Images', 'MyInfo', 'Requests', 'ImagesByEmails', 'Mail-Management'];
+    const firstAllowed = subPages.find(p => user.permissions?.includes(p));
+
+    if (firstAllowed) {
+      // Mapping some permission names to their actual routes if they differ
+      const routeMap = {
+        'Requests': 'Requests/Permissions-Users',
+        'ImagesByEmails': 'ImagesByEmails/1st-Email'
+      };
+      return <Navigate to={`/dashboard/${routeMap[firstAllowed] || firstAllowed}`} replace />;
     }
 
-    const fetchPermissions = async () => {
-      try {
-        const res = await axios.post(
-          `${import.meta.env.VITE_BASE_URL}/users/getadminwrapper`,
-          { username: user.name }
-        );
-
-        if (res.status === 200) {
-          setUserRole(res.data.role);
-          setPermissions(res.data.permissions || []);
-        }
-      } catch (err) {
-        console.error('Error fetching permissions:', err);
-        navigate('/home');
-      } finally {
-        setPermLoading(false);
-      }
-    };
-
-    fetchPermissions();
-  }, [user, userLoading, navigate]);
-
-  // Show nothing while loading user or permissions
-  if (userLoading || permLoading) return null;
-
-  const hasAccess = userRole === 'admin' || (permissions && permissions.includes(required));
-
-  if (location.pathname === '/dashboard') {
-    return <Navigate to="/dashboard/MyInfo" replace />;
+    return <Navigate to="/home" replace />;
   }
 
   return hasAccess ? children : <Navigate to="/home" replace />;
