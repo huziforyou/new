@@ -2,8 +2,10 @@ import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { IoMdTrash, IoMdAdd, IoMdMail } from "react-icons/io";
 import toast from 'react-hot-toast';
+import { useUser } from '../Context/UserContext';
 
 const MailManagement = () => {
+    const { token } = useUser();
     const [emails, setEmails] = useState([]);
     const [newEmail, setNewEmail] = useState('');
     const [loading, setLoading] = useState(false);
@@ -11,7 +13,10 @@ const MailManagement = () => {
     const fetchEmails = async () => {
         try {
             setLoading(true);
-            const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`, { withCredentials: true });
+            const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`, {
+                headers: { Authorization: `Bearer ${token}` },
+                withCredentials: true
+            });
             setEmails(res.data);
         } catch (error) {
             console.error(error);
@@ -22,15 +27,18 @@ const MailManagement = () => {
     };
 
     useEffect(() => {
-        fetchEmails();
-    }, []);
+        if (token) fetchEmails();
+    }, [token]);
 
     const handleAddEmail = async (e) => {
         e.preventDefault();
         if (!newEmail) return;
 
         try {
-            await axios.post(`${import.meta.env.VITE_BASE_URL}/api/image-sources`, { email: newEmail }, { withCredentials: true });
+            await axios.post(`${import.meta.env.VITE_BASE_URL}/api/image-sources`, { email: newEmail }, {
+                headers: { Authorization: `Bearer ${token}` },
+                withCredentials: true
+            });
             toast.success('Email added successfully');
             setNewEmail('');
             fetchEmails();
@@ -44,7 +52,10 @@ const MailManagement = () => {
         if (!window.confirm('Are you sure you want to delete this email?')) return;
 
         try {
-            await axios.delete(`${import.meta.env.VITE_BASE_URL}/api/image-sources/${id}`, { withCredentials: true });
+            await axios.delete(`${import.meta.env.VITE_BASE_URL}/api/image-sources/${id}`, {
+                headers: { Authorization: `Bearer ${token}` },
+                withCredentials: true
+            });
             toast.success('Email removed successfully');
             fetchEmails();
         } catch (error) {
