@@ -11,7 +11,7 @@ const MailManagement = () => {
     const fetchEmails = async () => {
         try {
             setLoading(true);
-            const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`);
+            const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`, { withCredentials: true });
             setEmails(res.data);
         } catch (error) {
             console.error(error);
@@ -30,7 +30,7 @@ const MailManagement = () => {
         if (!newEmail) return;
 
         try {
-            await axios.post(`${import.meta.env.VITE_BASE_URL}/api/image-sources`, { email: newEmail });
+            await axios.post(`${import.meta.env.VITE_BASE_URL}/api/image-sources`, { email: newEmail }, { withCredentials: true });
             toast.success('Email added successfully');
             setNewEmail('');
             fetchEmails();
@@ -44,7 +44,7 @@ const MailManagement = () => {
         if (!window.confirm('Are you sure you want to delete this email?')) return;
 
         try {
-            await axios.delete(`${import.meta.env.VITE_BASE_URL}/api/image-sources/${id}`);
+            await axios.delete(`${import.meta.env.VITE_BASE_URL}/api/image-sources/${id}`, { withCredentials: true });
             toast.success('Email removed successfully');
             fetchEmails();
         } catch (error) {

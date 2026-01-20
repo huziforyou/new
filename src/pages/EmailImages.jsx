@@ -25,7 +25,8 @@ const EmailImages = () => {
             setLoading(true);
             // Ensure email is encoded correctly if needed, though simple emails are usually fine
             const res = await axios.get(
-                `${import.meta.env.VITE_BASE_URL}/photos/getImages/${email}`
+                `${import.meta.env.VITE_BASE_URL}/photos/getImages/${email}`,
+                { withCredentials: true }
             );
             // Expecting { photos: [...] }
             const rawPhotos = res.data.photos || [];
@@ -113,8 +114,8 @@ const EmailImages = () => {
                 <button
                     onClick={() => setActiveTab("year")}
                     className={`px-4 py-2 rounded font-medium ${activeTab === "year"
-                            ? "bg-blue-600 text-white"
-                            : "bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-white"
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-white"
                         }`}
                 >
                     📁 Group by Year
@@ -122,8 +123,8 @@ const EmailImages = () => {
                 <button
                     onClick={() => setActiveTab("district")}
                     className={`px-4 py-2 rounded font-medium ${activeTab === "district"
-                            ? "bg-blue-600 text-white"
-                            : "bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-white"
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-white"
                         }`}
                 >
                     🏙️ Group by District

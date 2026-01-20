@@ -16,7 +16,7 @@ const ImagesByEmails = () => {
         const fetchEmails = async () => {
             try {
                 setLoading(true);
-                const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`);
+                const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`, { withCredentials: true });
                 const fetchedEmails = res.data;
                 setEmails(fetchedEmails);
 
