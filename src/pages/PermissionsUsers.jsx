@@ -222,6 +222,7 @@ import toast from 'react-hot-toast';
 import { FaUser } from "react-icons/fa";
 import { IoClose } from 'react-icons/io5';
 import AdminEditUserModal from '../components/AdminEditUserModal';
+import { useUser } from '../Context/UserContext';
 
 const PermissionsUsers = () => {
   const { token } = useUser(); // ✅ Added token
