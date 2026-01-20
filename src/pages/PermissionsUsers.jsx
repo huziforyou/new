@@ -224,6 +224,7 @@ import { IoClose } from 'react-icons/io5';
 import AdminEditUserModal from '../components/AdminEditUserModal';
 
 const PermissionsUsers = () => {
+  const { token } = useUser(); // ✅ Added token
   const [users, setUsers] = useState([])
   const [giveaccess, setGiveaccess] = useState(false)
   const [isdelete, setIsdelete] = useState(false)
@@ -234,8 +235,11 @@ const PermissionsUsers = () => {
   const [pages, setPages] = useState([])
 
   const getUsers = async () => {
+    if (!token) return;
     try {
-      const response = await axios.get(`${import.meta.env.VITE_BASE_URL}/users/`);
+      const response = await axios.get(`${import.meta.env.VITE_BASE_URL}/users/`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (response.status === 200) {
         setUsers(response.data)
       }
@@ -245,8 +249,11 @@ const PermissionsUsers = () => {
   }
 
   const deleteUser = async () => {
+    if (!token) return;
     try {
-      const response = await axios.delete(`${import.meta.env.VITE_BASE_URL}/users/delete/${id}/`);
+      const response = await axios.delete(`${import.meta.env.VITE_BASE_URL}/users/delete/${id}/`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (response.status === 200) {
         toast.success(response.data.message)
         getUsers();
@@ -258,10 +265,12 @@ const PermissionsUsers = () => {
   }
 
   const giveAccess = async (username, pages) => {
+    if (!token) return;
     try {
       const response = await axios.post(
         `${import.meta.env.VITE_BASE_URL}/users/give-access/${username}`,
-        { pages }
+        { pages },
+        { headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (response.status === 200) {
@@ -274,8 +283,11 @@ const PermissionsUsers = () => {
   };
 
   const getUserPermissions = async (username) => {
+    if (!token) return;
     try {
-      const response = await axios.post(`${import.meta.env.VITE_BASE_URL}/users/permissions/${username}`);
+      const response = await axios.post(`${import.meta.env.VITE_BASE_URL}/users/permissions/${username}`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (response.status === 200) {
         setPages(response.data.permissions)
       }
@@ -289,8 +301,11 @@ const PermissionsUsers = () => {
   // Fetch available email sources
   useEffect(() => {
     const fetchEmails = async () => {
+      if (!token) return;
       try {
-        const response = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`);
+        const response = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
         if (response.status === 200) {
           // Extract just the email strings
           const emails = response.data.map(item => item.email);
@@ -301,11 +316,11 @@ const PermissionsUsers = () => {
       }
     };
     fetchEmails();
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     getUsers()
-  }, [])
+  }, [token])
 
   return (
     <div className='lg:p-4 py-4 grid place-items-center lg:grid-cols-6 grid-cols-2 gap-2 relative'>
@@ -338,7 +353,7 @@ const PermissionsUsers = () => {
       {/* Give Access Modal */}
       {giveaccess && (
         <div className='fixed flex items-center justify-center top-0 bottom-0 left-0 right-0 bg-black/20 z-50'>
-          <div className='bg-white flex flex-col gap-4 justify-between dark:bg-zinc-800 rounded-md h-auto w-80 p-4'>
+          <div className='bg-white flex flex-col gap-4 justify-between dark:bg-zinc-800 rounded-md h-auto w-80 p-4 shadow-xl border border-gray-100 dark:border-zinc-700'>
 
             {/* Close Icon */}
             <div className='text-black dark:text-white text-xl flex items-center justify-end'>
@@ -348,15 +363,15 @@ const PermissionsUsers = () => {
             {/* Content */}
             <div className='w-full flex flex-col items-center justify-between h-full gap-4'>
               <h3 className='text-roboto uppercase text-sm text-center'>
-                Do you want to <span className='font-semibold'>give page access</span> to <span className='font-bold'>{username}</span>?
+                Do you want to <span className='font-semibold text-blue-600'>give page access</span> to <span className='font-bold'>{username}</span>?
               </h3>
 
               {/* Current Pages */}
               <div className='flex flex-wrap gap-2'>
                 {pages.map((page, idx) => (
-                  <h6 key={idx + page} className='p-2 flex items-center gap-2 uppercase text-xs lg:text-sm rounded bg-black/30'>
+                  <h6 key={idx + page} className='p-2 flex items-center gap-2 uppercase text-[10px] rounded bg-blue-500/10 text-blue-600 border border-blue-500/20'>
                     {page}
-                    <IoClose onClick={() => setPages(pages.filter((_, i) => i !== idx))} className="cursor-pointer" />
+                    <IoClose onClick={() => setPages(pages.filter((_, i) => i !== idx))} className="cursor-pointer hover:scale-125 transition-transform" />
                   </h6>
                 ))}
               </div>
@@ -368,56 +383,52 @@ const PermissionsUsers = () => {
                   if (!newValue || pages.includes(newValue)) return;
                   setPages(prev => [...prev, newValue]);
                 }}
-                className='w-full p-2 rounded border border-gray-300 dark:border-zinc-600 text-black dark:text-white dark:bg-zinc-600 bg-white'
+                className='w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 text-sm dark:bg-zinc-900 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all'
               >
-                <option value="" disabled>Pages Access</option>
+                <option value="" disabled selected>Select Permissions...</option>
 
-                {/* Core Pages */}
-                <option value="Images">Images</option>
-                <option value="Overviews">Overviews</option>
-                <option value="MyInfo">My Info</option>
+                {/* Core Pages Group */}
+                <optgroup label="Dashboard Access">
+                  <option value="Images">Images Gallery</option>
+                  <option value="Overviews">Project Overview</option>
+                  <option value="MyInfo">User Settings</option>
+                </optgroup>
 
-                {/* User Management Group */}
-                <option value="" disabled>──────────</option>
-                <option value="Requests">Users Management</option>
-                <option value="Permissions-Users">Permissions Users</option>
-                <option value="Pending-Users">Pending Users</option>
-                <option value="Approved-Users">Approved Users</option>
-                <option value="Denied-Users">Denied Users</option>
+                {/* Management Group */}
+                <optgroup label="Management Access">
+                  <option value="Requests">Users Management (Parent)</option>
+                  <option value="Permissions-Users">Permissions Controller</option>
+                  <option value="Pending-Users">Pending Requests</option>
+                  <option value="Approved-Users">Approved List</option>
+                  <option value="Denied-Users">Denied List</option>
+                  <option value="Mail-Management">Mail Management</option>
+                </optgroup>
 
-                <option value="" disabled>──────────</option>
-                <option value="ImagesByEmails">Images By Emails (Page Access)</option>
+                <optgroup label="Sync Pages">
+                  <option value="ImagesByEmails">Images By Emails (Main)</option>
+                </optgroup>
 
-                {/* Dynamic Emails from Database */}
-                <option value="" disabled>── Email Data Access ──</option>
-                {availableEmails.map((email) => (
-                  <option key={email} value={email.toLowerCase()}>{email}</option>
-                ))}
+                {/* Email Data Access (Dynamic) */}
+                <optgroup label="Map Data Access (Emails)">
+                  {availableEmails.map((email) => (
+                    <option key={email} value={email.toLowerCase()}>{email}</option>
+                  ))}
+                  {availableEmails.length === 0 && <option disabled>No emails found</option>}
+                </optgroup>
 
-                {/* Legacy Options (Optional: keep or remove based on preference) */}
-                <option value="" disabled>── Legacy Options ──</option>
-                <option value="1st-Email">1st Email</option>
-                <option value="2nd-Email">2nd Email</option>
-                <option value="3rd-Email">3rd Email</option>
-
-                {/* Map Access */}
-                <option value="" disabled>──────────</option>
-                <option value="FirstEmail">ShowImageByFirstEmail</option>
-                <option value="SecondEmail">ShowImageBySecondEmail</option>
-                <option value="ThirdEmail">ShowImageByThirdEmail</option>
               </select>
 
               {/* Buttons */}
               <div className='flex flex-col w-full gap-3'>
                 <button
                   onClick={() => giveAccess(username, pages)}
-                  className='p-2 w-full bg-green-500/20 text-green-500'
+                  className='p-3 w-full bg-green-500 hover:bg-green-600 text-white rounded-lg font-bold text-xs uppercase transition-colors shadow-lg shadow-green-500/20'
                 >
-                  Give Access
+                  Confirm Permissions
                 </button>
                 <button
                   onClick={() => { setGiveaccess(false); setusername(''); }}
-                  className='p-2 w-full bg-red-500/20 text-red-500'
+                  className='p-3 w-full bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-gray-300 rounded-lg font-bold text-xs uppercase hover:bg-gray-200 transition-colors'
                 >
                   Cancel
                 </button>

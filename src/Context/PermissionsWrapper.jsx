@@ -45,16 +45,7 @@ const PermissionWrapper = ({ children, required }) => {
   // Show nothing while loading user or permissions
   if (userLoading || permLoading) return null;
 
-  // const hasAccess = userRole === 'admin' || permissions.includes(required);
-
-  const hasAccess = () => {
-  const { user } = useUser();
-
-  return (requiredPermission) => {
-    if (!user) return false;
-    return user.role === 'admin' || user.permissions?.includes(requiredPermission);
-  };
-};
+  const hasAccess = userRole === 'admin' || (permissions && permissions.includes(required));
 
   if (location.pathname === '/dashboard') {
     return <Navigate to="/dashboard/MyInfo" replace />;

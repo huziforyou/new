@@ -147,7 +147,7 @@ const App = () => {
               <Route
                 path="Mail-Management"
                 element={
-                  <PermissionWrapper required='Permissions-Users'>
+                  <PermissionWrapper required='Mail-Management'>
                     <MailManagement />
                   </PermissionWrapper>
                 }
