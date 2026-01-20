@@ -110,17 +110,40 @@ const MailManagement = () => {
                                     <p className="font-medium text-gray-800 dark:text-gray-200">{item.email}</p>
                                     <p className="text-xs text-gray-400 mt-1">Added {new Date(item.createdAt).toLocaleDateString()}</p>
                                 </div>
-                                <button
-                                    onClick={() => handleDeleteEmail(item._id)}
-                                    className="text-red-500 hover:text-red-700 p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                                    title="Delete Email"
-                                >
-                                    <IoMdTrash size={20} />
-                                </button>
+                                <div className="flex items-center gap-3">
+                                    <div className="relative group">
+                                        <p className="text-xs text-gray-400 cursor-help">How to sync?</p>
+                                        <div className="absolute bottom-full right-0 mb-2 w-48 p-2 bg-gray-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                            To see images from this email, the owner ({item.email}) must log in and click "Sync Drive".
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleDeleteEmail(item._id)}
+                                        className="text-red-500 hover:text-red-700 p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                        title="Delete Email"
+                                    >
+                                        <IoMdTrash size={20} />
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>
                 )}
+            </div>
+
+            {/* Sync Information / Global Action */}
+            <div className="bg-blue-50 dark:bg-blue-900/10 p-6 rounded-lg border border-blue-100 dark:border-blue-800">
+                <h2 className="text-lg font-semibold text-blue-800 dark:text-blue-300 mb-2">Sync Instructions</h2>
+                <p className="text-sm text-blue-600 dark:text-blue-300 mb-4">
+                    For images to appear on the map, the system needs to fetch them from Google Drive.
+                    If you are the owner of one of the allowed emails, click the button below to sync your drive now.
+                </p>
+                <a
+                    href={`${import.meta.env.VITE_BASE_URL}/auth/google`}
+                    className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-sm"
+                >
+                    <IoMdMail /> Sync My Google Drive
+                </a>
             </div>
         </div>
     );

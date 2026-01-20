@@ -60,7 +60,8 @@ const Home = () => {
       try {
         // 1. Get Allowed Emails
         const emailsRes = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`);
-        const allowedEmails = emailsRes.data.map(e => e.email);
+        // Normalize to lowercase to ensure matching with backend uploadedBy
+        const allowedEmails = emailsRes.data.map(e => e.email.toLowerCase());
 
         let emailsToFetch = [];
 
@@ -112,7 +113,7 @@ const Home = () => {
     const loadFilters = async () => {
       try {
         const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`);
-        const allEmails = res.data.map(e => e.email);
+        const allEmails = res.data.map(e => e.email.toLowerCase());
         if (user?.role === 'admin') {
           setAvailableFilters(['All', ...allEmails]);
         } else {
