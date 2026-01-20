@@ -1,278 +1,195 @@
 import axios from "axios";
 import React, { useEffect, useMemo, useState, Suspense, lazy } from "react";
 import { Link } from "react-router-dom";
+import { IoMdImages } from "react-icons/io";
+import { FaGoogleDrive, FaUsers, FaMapMarkedAlt, FaHistory } from "react-icons/fa";
+import { useUser } from "../Context/UserContext";
 
-// Code Splitting: Recharts library ko sirf zaroorat par load karein
+// Lazy load charts for performance
 const LineChart = lazy(() => import("recharts").then(module => ({ default: module.LineChart })));
+const BarChart = lazy(() => import("recharts").then(module => ({ default: module.BarChart })));
 const Line = lazy(() => import("recharts").then(module => ({ default: module.Line })));
+const Bar = lazy(() => import("recharts").then(module => ({ default: module.Bar })));
 const XAxis = lazy(() => import("recharts").then(module => ({ default: module.XAxis })));
 const YAxis = lazy(() => import("recharts").then(module => ({ default: module.YAxis })));
 const Tooltip = lazy(() => import("recharts").then(module => ({ default: module.Tooltip })));
 const CartesianGrid = lazy(() => import("recharts").then(module => ({ default: module.CartesianGrid })));
 const ResponsiveContainer = lazy(() => import("recharts").then(module => ({ default: module.ResponsiveContainer })));
+const Cell = lazy(() => import("recharts").then(module => ({ default: module.Cell })));
 
-// -----------------------------
-// Helper Functions (Saaf-suthra version)
-// -----------------------------
-const MONTHS = [
-  { label: "January", value: "01" }, { label: "February", value: "02" },
-  { label: "March", value: "03" }, { label: "April", value: "04" },
-  { label: "May", value: "05" }, { label: "June", value: "06" },
-  { label: "July", value: "07" }, { label: "August", value: "08" },
-  { label: "September", value: "09" }, { label: "October", value: "10" },
-  { label: "November", value: "11" }, { label: "December", value: "12" },
-];
+const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
-const ymLabel = (ym) => {
-  if (!ym || !ym.includes('-')) return ym;
-  const d = new Date(`${ym}-02`); // 2 tarikh istemal karein time-zone issues se bachne ke liye
-  return isNaN(d) ? ym : d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-};
-
-const downloadCustomCSV = (headers, rows, filename) => {
-  if (!rows?.length) return;
-  const headerLine = headers.map(h => h.label).join(",");
-  const bodyLines = rows.map(row => 
-    headers.map(h => `"${row[h.key] ?? ""}"`).join(",")
-  );
-  const csv = [headerLine, ...bodyLines].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.setAttribute("download", filename);
-  document.body.appendChild(a); a.click();
-  a.remove(); URL.revokeObjectURL(url);
-};
-
-const groupSum = (arr, keys, valueKey = "count") => {
-  const map = new Map();
-  for (const item of arr) {
-    const k = keys.map((k) => item[k]).join("||");
-    const prev = map.get(k) || 0;
-    map.set(k, prev + (Number(item[valueKey]) || 0));
-  }
-  return Array.from(map.entries()).map(([k, total]) => {
-    const parts = k.split("||");
-    const obj = {};
-    keys.forEach((key, i) => { obj[key] = parts[i]; });
-    obj[valueKey] = total;
-    return obj;
-  });
-};
-
-// -----------------------------
-// Main Component
-// -----------------------------
 const Overview = () => {
-  const [users, setUsers] = useState([]);
-  const [monthlyStats, setMonthlyStats] = useState([]);
+  const { token } = useUser();
+  const [stats, setStats] = useState(null);
+  const [monthlyData, setMonthlyData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const [selectedYear, setSelectedYear] = useState("All");
-  const [selectedMonth, setSelectedMonth] = useState("All");
-  const [selectedUploader, setSelectedUploader] = useState("All");
-
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
+    const fetchOverviewData = async () => {
+      if (!token) return;
       try {
-        const [usersRes, monthlyRes] = await Promise.all([
-          axios.get(`${import.meta.env.VITE_BASE_URL}/users/`),
-          axios.get(`${import.meta.env.VITE_BASE_URL}/photos/get-image-by-month`),
+        setLoading(true);
+        const [statsRes, monthlyRes] = await Promise.all([
+          axios.get(`${import.meta.env.VITE_BASE_URL}/photos/overview-stats`, {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          axios.get(`${import.meta.env.VITE_BASE_URL}/photos/get-image-by-month`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
         ]);
 
-        if (usersRes.status === 200) setUsers(usersRes.data || []);
+        setStats(statsRes.data);
 
-        if (monthlyRes.status === 200) {
-          const stats = (monthlyRes.data?.stats || monthlyRes.data || []).map((item) => ({
-            month: item.month || item._id?.month || item._id || "",
-            uploadedBy: item.uploadedBy || item._id?.uploadedBy || "Unknown",
-            count: item.count ?? item.total ?? 0,
-          }));
-          setMonthlyStats(stats);
-        }
+        // Process monthly aggregate for chart
+        const rawMonthly = monthlyRes.data?.stats || [];
+        const groupedByMonth = rawMonthly.reduce((acc, curr) => {
+          const month = curr.month;
+          if (!acc[month]) acc[month] = { month, count: 0 };
+          acc[month].count += curr.count;
+          return acc;
+        }, {});
+        setMonthlyData(Object.values(groupedByMonth).sort((a, b) => a.month.localeCompare(b.month)));
+
       } catch (err) {
         console.error("Failed to fetch overview data:", err);
-        setError("Could not load dashboard data. Please try again later.");
+        setError("Failed to load project details.");
       } finally {
         setLoading(false);
       }
     };
-    
-    fetchData();
-  }, []);
 
-  // Behtar Memoized Calculations
-  const uploaders = useMemo(() => {
-    const uploaderSet = new Set(monthlyStats.map(s => s.uploadedBy).filter(Boolean));
-    return ["All", ...Array.from(uploaderSet).sort()];
-  }, [monthlyStats]);
-  
-  const availableYears = useMemo(() => {
-    const years = new Set(monthlyStats.map(m => m.month?.split("-")?.[0]).filter(Boolean));
-    return ["All", ...Array.from(years).sort((a, b) => b - a)]; // Naye saal pehle
-  }, [monthlyStats]);
+    fetchOverviewData();
+  }, [token]);
 
-  const filteredMonthlyStats = useMemo(() => {
-    return monthlyStats.filter((row) => {
-      const [y, m] = (row.month || "").split("-");
-      if (!y || !m) return false;
-      if (selectedYear !== "All" && y !== selectedYear) return false;
-      if (selectedMonth !== "All" && m !== selectedMonth) return false;
-      if (selectedUploader !== "All" && row.uploadedBy !== selectedUploader) return false;
-      return true;
-    });
-  }, [monthlyStats, selectedYear, selectedMonth, selectedUploader]);
+  const statCards = useMemo(() => [
+    { label: "Total Images", value: stats?.totalImages || 0, icon: <IoMdImages className="text-blue-500" />, color: "bg-blue-500/10" },
+    { label: "Map Coverage", value: `${stats?.coverage || 0}%`, icon: <FaMapMarkedAlt className="text-green-500" />, color: "bg-green-500/10" },
+    { label: "Active Sources", value: stats?.totalSources || 0, icon: <FaGoogleDrive className="text-amber-500" />, color: "bg-amber-500/10" },
+    { label: "Contributing Users", value: stats?.activeUsersCount || 0, icon: <FaUsers className="text-purple-500" />, color: "bg-purple-500/10" },
+  ], [stats]);
 
-  const chartData = useMemo(() => {
-    const allMonths = [...new Set(monthlyStats.map(r => r.month))].sort();
-    const relevantMonths = allMonths.filter(m => {
-        const [y, mo] = m.split('-');
-        if (selectedYear !== 'All' && y !== selectedYear) return false;
-        if (selectedMonth !== 'All' && mo !== selectedMonth) return false;
-        return true;
-    });
-
-    if (selectedUploader !== "All") {
-        const dataMap = new Map(filteredMonthlyStats.map(item => [item.month, item.count]));
-        return relevantMonths.map(m => ({ month: m, count: dataMap.get(m) || 0 }));
-    } else {
-        const uploaderSet = [...new Set(filteredMonthlyStats.map(r => r.uploadedBy))].sort();
-        return relevantMonths.map(m => {
-            const row = { month: m };
-            for (const u of uploaderSet) {
-                const rec = monthlyStats.find(x => x.month === m && x.uploadedBy === u);
-                row[u] = rec?.count || 0;
-            }
-            return row;
-        });
-    }
-  }, [filteredMonthlyStats, monthlyStats, selectedYear, selectedMonth, selectedUploader]);
-
-  const seriesUploaders = useMemo(() => {
-      if (selectedUploader !== "All") return [selectedUploader];
-      return [...new Set(filteredMonthlyStats.map(r => r.uploadedBy))].sort();
-  }, [filteredMonthlyStats, selectedUploader]);
-
-  const reportMonthlyRows = useMemo(() => groupSum(filteredMonthlyStats, ["uploadedBy", "month"], "count"), [filteredMonthlyStats]);
-  
-  const reportYearlyRows = useMemo(() => {
-    const rows = filteredMonthlyStats.map(r => ({
-      uploadedBy: r.uploadedBy,
-      year: r.month.split("-")[0],
-      count: r.count,
-    }));
-    return groupSum(rows, ["uploadedBy", "year"], "count");
-  }, [filteredMonthlyStats]);
-
-  if (loading) return <div className="text-center p-10 font-semibold">Loading Dashboard...</div>;
-  if (error) return <div className="text-center p-10 text-red-500 font-semibold">{error}</div>;
+  if (loading) return <div className="flex items-center justify-center min-h-[400px] text-gray-400">Loading project overview...</div>;
+  if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
 
   return (
-    <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      <div className="flex flex-col sm:flex-row items-center justify-between bg-gray-200 dark:bg-zinc-800 p-4 rounded-lg shadow-sm">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">
-          Total Users: <span className="text-blue-600 dark:text-blue-400">{users.length}</span>
-        </h1>
-        <Link to="/dashboard/Requests/Permissions-Users" className="mt-2 sm:mt-0 text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
-          Manage Users
-        </Link>
-      </div>
-
-      <div className="bg-gray-200 dark:bg-zinc-800 p-4 rounded-lg shadow-sm">
-        <h2 className="text-lg font-semibold mb-3 text-gray-800 dark:text-white">Filter Options</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <FilterSelect label="Year" value={selectedYear} onChange={setSelectedYear} options={availableYears} />
-          <FilterSelect label="Month" value={selectedMonth} onChange={setSelectedMonth} options={["All", ...MONTHS]} />
-          <FilterSelect label="Uploader" value={selectedUploader} onChange={setSelectedUploader} options={uploaders} />
+    <div className="p-6 lg:p-10 space-y-8 animate-in fade-in duration-500">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Project Overview</h1>
+          <p className="text-gray-500 dark:text-gray-400">Track image synchronization and geographical data.</p>
+        </div>
+        <div className="flex gap-3">
+          <Link to="/home" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-blue-500/20">
+            View Interactive Map
+          </Link>
         </div>
       </div>
 
-      <div className="bg-gray-200 dark:bg-zinc-800 p-4 rounded-lg shadow-sm min-h-[350px]">
-        <h2 className="text-lg font-semibold mb-4 text-gray-800 dark:text-white">Monthly Uploads</h2>
-        <Suspense fallback={<div className="text-center pt-20">Loading Chart...</div>}>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
-              <XAxis dataKey="month" tickFormatter={ymLabel} fontSize={12} />
-              <YAxis allowDecimals={false} fontSize={12} />
-              <Tooltip
-                contentStyle={{ backgroundColor: "#1f2937", color: "#fff", borderRadius: "0.5rem", border: 'none' }}
-                formatter={(value, name) => [value, name === "count" ? "Images" : name]}
-                labelFormatter={ymLabel}
-              />
-              {selectedUploader === "All"
-                ? seriesUploaders.map(u => <Line key={u} type="monotone" dataKey={u} name={u} strokeWidth={2} dot={false} />)
-                : <Line type="monotone" dataKey="count" name="Images" strokeWidth={2} dot={false} />
-              }
-            </LineChart>
-          </ResponsiveContainer>
-        </Suspense>
+      {/* Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {statCards.map((card, i) => (
+          <div key={i} className="bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 flex items-center gap-4">
+            <div className={`p-4 rounded-xl ${card.color}`}>
+              {React.cloneElement(card.icon, { size: 24 })}
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{card.label}</p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{card.value}</h3>
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* ✅ UI Behtari: 2-column grid ab behtar lagega */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <ReportTable title="Monthly Summary" headers={[{label: 'Uploader', key: 'uploadedBy'}, {label: 'Month', key: 'month'}, {label: 'Images', key: 'count'}]} rows={reportMonthlyRows} filename="monthly_report.csv" />
-        <ReportTable title="Yearly Summary" headers={[{label: 'Uploader', key: 'uploadedBy'}, {label: 'Year', key: 'year'}, {label: 'Images', key: 'count'}]} rows={reportYearlyRows} filename="yearly_report.csv" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* District Distribution Chart */}
+        <div className="lg:col-span-2 bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700">
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Top District Distribution</h3>
+          <div className="h-[300px]">
+            <Suspense fallback={<div>Loading Chart...</div>}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stats?.topDistricts || []} layout="vertical" margin={{ left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} strokeOpacity={0.1} />
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="district" type="category" width={100} axisLine={false} tickLine={false} fontSize={12} stroke="currentColor" />
+                  <Tooltip
+                    cursor={{ fill: 'transparent' }}
+                    contentStyle={{ backgroundColor: '#18181b', border: 'none', borderRadius: '8px', color: '#fff' }}
+                  />
+                  <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={20}>
+                    {(stats?.topDistricts || []).map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </Suspense>
+          </div>
+        </div>
+
+        {/* Upload History Trend */}
+        <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700">
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Synchronization Trend</h3>
+          <div className="h-[300px]">
+            <Suspense fallback={<div>Loading Chart...</div>}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={monthlyData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.1} />
+                  <XAxis dataKey="month" fontSize={10} axisLine={false} tickLine={false} />
+                  <YAxis fontSize={10} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ backgroundColor: '#18181b', border: 'none', borderRadius: '8px', color: '#fff' }} />
+                  <Line type="monotone" dataKey="count" stroke="#3B82F6" strokeWidth={3} dot={{ r: 4, fill: '#3B82F6' }} activeDot={{ r: 6 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </Suspense>
+          </div>
+        </div>
+      </div>
+
+      {/* Latest Synced Images */}
+      <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 overflow-hidden">
+        <div className="p-6 border-b border-gray-100 dark:border-zinc-700 flex justify-between items-center">
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <FaHistory className="text-gray-400" /> Recent Activities
+          </h3>
+          <Link to="/dashboard/Images" className="text-blue-500 hover:underline text-sm font-medium">View All Gallery</Link>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-gray-50 dark:bg-zinc-900/50 text-xs uppercase tracking-wider text-gray-500 font-bold">
+                <th className="px-6 py-4">Image Name</th>
+                <th className="px-6 py-4">Uploaded By</th>
+                <th className="px-6 py-4">Location</th>
+                <th className="px-6 py-4">Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-zinc-700">
+              {stats?.recentPhotos?.map((photo) => (
+                <tr key={photo._id} className="hover:bg-gray-50 dark:hover:bg-zinc-700/30 transition-colors">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white truncate max-w-[200px]">{photo.name}</td>
+                  <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{photo.uploadedBy}</td>
+                  <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                    {photo.district ? `${photo.district}, ${photo.village || ''}` : 'No GPS data'}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                    {new Date(photo.createdAt).toLocaleDateString()}
+                  </td>
+                </tr>
+              ))}
+              {(!stats?.recentPhotos || stats.recentPhotos.length === 0) && (
+                <tr>
+                  <td colSpan="4" className="px-6 py-8 text-center text-gray-500 italic">No recent activity found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 };
-
-// Reusable Filter Dropdown
-const FilterSelect = ({ label, value, onChange, options }) => (
-    <div>
-        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">{label}</label>
-        <select
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="rounded-md px-3 py-2 w-full bg-white dark:bg-zinc-700 text-gray-900 dark:text-white border-gray-300 dark:border-zinc-600 focus:ring-blue-500 focus:border-blue-500"
-        >
-            {options.map(opt => (
-                <option key={typeof opt === 'object' ? opt.value : opt} value={typeof opt === 'object' ? opt.value : opt}>
-                    {typeof opt === 'object' ? opt.label : opt}
-                </option>
-            ))}
-        </select>
-    </div>
-);
-
-// Reusable Report Table
-const ReportTable = ({ title, headers, rows, filename }) => (
-  <div className="bg-gray-200 dark:bg-zinc-800 p-4 rounded-lg shadow-sm overflow-x-auto">
-    <div className="flex justify-between items-center mb-3">
-      <h3 className="font-semibold text-gray-800 dark:text-white">{title}</h3>
-      <button
-        onClick={() => downloadCustomCSV(headers, rows, filename)}
-        className="px-3 py-1 bg-blue-600 text-white rounded-md text-sm disabled:opacity-50 hover:bg-blue-700 transition-colors"
-        disabled={!rows.length}
-      >
-        Download
-      </button>
-    </div>
-    {rows.length > 0 ? (
-      <div className="max-h-80 overflow-y-auto">
-        <table className="w-full text-sm min-w-[300px]">
-          <thead className="sticky top-0 bg-gray-200 dark:bg-zinc-800">
-            <tr className="border-b-2 border-gray-300 dark:border-gray-600">
-              {headers.map(h => <th key={h.key} className="p-2 text-left font-semibold">{h.label}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i} className="border-b dark:border-gray-700 last:border-b-0">
-                {headers.map(h => <td key={h.key} className="p-2 whitespace-nowrap">{h.key === 'month' ? ymLabel(r[h.key]) : r[h.key]}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    ) : (
-      <p className="text-center text-gray-500 dark:text-gray-400 py-4">No data for selected filters.</p>
-    )}
-  </div>
-);
 
 export default Overview;
