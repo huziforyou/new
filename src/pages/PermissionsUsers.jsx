@@ -231,7 +231,7 @@ const PermissionsUsers = () => {
   const [id, setid] = useState('')
   const [editUser, setEditUser] = useState(false)
   const [editUserData, setEditUserData] = useState(null);
-  const [pages, setPages] = useState([]) 
+  const [pages, setPages] = useState([])
 
   const getUsers = async () => {
     try {
@@ -284,6 +284,25 @@ const PermissionsUsers = () => {
     }
   }
 
+  const [availableEmails, setAvailableEmails] = useState([]);
+
+  // Fetch available email sources
+  useEffect(() => {
+    const fetchEmails = async () => {
+      try {
+        const response = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`);
+        if (response.status === 200) {
+          // Extract just the email strings
+          const emails = response.data.map(item => item.email);
+          setAvailableEmails(emails);
+        }
+      } catch (err) {
+        console.error("Error fetching available emails:", err);
+      }
+    };
+    fetchEmails();
+  }, []);
+
   useEffect(() => {
     getUsers()
   }, [])
@@ -298,18 +317,18 @@ const PermissionsUsers = () => {
             </div>
             <h1 className='text-roboto uppercase'>{user.name}</h1>
           </div>
-          <button 
-            onClick={() => { setEditUserData(user); setEditUser(true); }} 
+          <button
+            onClick={() => { setEditUserData(user); setEditUser(true); }}
             className='w-full p-2 text-roboto uppercase text-xs lg:text-sm cursor-pointer hover:bg-blue-500/30 dark:hover:bg-blue-500/10 bg-blue-500/20 text-blue-500'>
             Edit User
           </button>
-          <button 
-            onClick={() => { setGiveaccess(true); setid(user._id); getUserPermissions(user.name); setusername(user.name) }} 
+          <button
+            onClick={() => { setGiveaccess(true); setid(user._id); getUserPermissions(user.name); setusername(user.name) }}
             className='w-full p-2 text-roboto uppercase text-xs lg:text-sm cursor-pointer hover:bg-green-500/30 dark:hover:bg-green-500/10 bg-green-500/20 text-green-500'>
             Give Access
           </button>
-          <button 
-            onClick={() => { setIsdelete(true); setusername(user.name); setid(user._id) }} 
+          <button
+            onClick={() => { setIsdelete(true); setusername(user.name); setid(user._id) }}
             className='w-full p-2 text-roboto uppercase text-xs lg:text-sm cursor-pointer hover:bg-red-500/30 dark:hover:bg-red-500/10 bg-red-500/20 text-red-500'>
             Permanent Delete
           </button>
@@ -336,7 +355,7 @@ const PermissionsUsers = () => {
               <div className='flex flex-wrap gap-2'>
                 {pages.map((page, idx) => (
                   <h6 key={idx + page} className='p-2 flex items-center gap-2 uppercase text-xs lg:text-sm rounded bg-black/30'>
-                    {page} 
+                    {page}
                     <IoClose onClick={() => setPages(pages.filter((_, i) => i !== idx))} className="cursor-pointer" />
                   </h6>
                 ))}
@@ -366,9 +385,17 @@ const PermissionsUsers = () => {
                 <option value="Approved-Users">Approved Users</option>
                 <option value="Denied-Users">Denied Users</option>
 
-                {/* Images By Emails Group */}
                 <option value="" disabled>──────────</option>
-                <option value="ImagesByEmails">Images By Emails</option>
+                <option value="ImagesByEmails">Images By Emails (Page Access)</option>
+
+                {/* Dynamic Emails from Database */}
+                <option value="" disabled>── Email Data Access ──</option>
+                {availableEmails.map((email) => (
+                  <option key={email} value={email.toLowerCase()}>{email}</option>
+                ))}
+
+                {/* Legacy Options (Optional: keep or remove based on preference) */}
+                <option value="" disabled>── Legacy Options ──</option>
                 <option value="1st-Email">1st Email</option>
                 <option value="2nd-Email">2nd Email</option>
                 <option value="3rd-Email">3rd Email</option>
@@ -412,13 +439,13 @@ const PermissionsUsers = () => {
                 Do You Want to Delete <span className='font-semibold'>{username}</span> User?
               </h3>
               <div className='flex flex-col w-full gap-3'>
-                <button 
-                  onClick={() => { deleteUser() }} 
+                <button
+                  onClick={() => { deleteUser() }}
                   className='p-2 w-full bg-green-500/20 text-green-500'>
                   Yes
                 </button>
-                <button 
-                  onClick={() => { setIsdelete(false); setusername('') }} 
+                <button
+                  onClick={() => { setIsdelete(false); setusername('') }}
                   className='p-2 w-full bg-red-500/20 text-red-500'>
                   Cancel
                 </button>

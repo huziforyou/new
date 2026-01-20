@@ -58,43 +58,55 @@ const Home = () => {
   useEffect(() => {
     const fetchImages = async () => {
       try {
-        // 1. Get Allowed Emails
+        // 1. Get Allowed Emails (The "New" Dynamic Source)
         const emailsRes = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`);
-        // Normalize to lowercase to ensure matching with backend uploadedBy
         const allowedEmails = emailsRes.data.map(e => e.email.toLowerCase());
 
         let emailsToFetch = [];
 
-        // 2. Filter based on permissions
+        // 2. Filter based on permissions (Strict "By Email" Logic)
         if (user?.role === 'admin') {
+          // Admin sees ALL allowed emails
           emailsToFetch = allowedEmails;
         } else {
-          // Check if user has permission for the SPECIFIC email
-          // (Assumes permissions are now stored as email addresses, or we support legacy for a bit if needed)
-          // If the user system still uses 'FirstEmail', this part is tricky without migrating users.
-          // But since we are moving to dynamic, let's assume permissions match emails.
-          // If not, non-admin users might see nothing until their permissions are updated.
-          emailsToFetch = allowedEmails.filter(email => user?.permissions?.includes(email));
+          // Users see ONLY emails they have explicit permission for
+          // Normalize user permissions to lowercase for comparison
+          const userPerms = (user?.permissions || []).map(p => p?.toLowerCase());
+          emailsToFetch = allowedEmails.filter(email => userPerms.includes(email));
         }
 
-        // 3. Filter based on UI selection
+        // 3. Filter based on UI selection (Dropdown)
         if (selectedFilter !== 'All') {
-          emailsToFetch = emailsToFetch.filter(e => e === selectedFilter);
+          // If selected filter is valid and permitted
+          if (emailsToFetch.includes(selectedFilter.toLowerCase())) {
+            emailsToFetch = [selectedFilter.toLowerCase()];
+          } else {
+            // If user selects something they shouldn't have access to (UI glitch?), fetch nothing or reset
+            if (selectedFilter !== 'All') emailsToFetch = [];
+          }
         }
 
         let allImages = [];
-        // 4. Fetch images for each email
+        // 4. Fetch images for each authorized email
+        // This connects to the backend controller which now also enforces these permissions
         for (const email of emailsToFetch) {
-          const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/photos/getImages/${email}`);
-          const emailImages = res.data.photos.map(img => ({
-            ...img,
-            emailKey: email,
-            url: `${import.meta.env.VITE_BASE_URL}/photos/image-data/${img._id}`,
-            icon: getMarkerIcon(email)
-          }));
-          allImages.push(...emailImages);
+          try {
+            const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/photos/getImages/${email}`);
+            const emailImages = res.data.photos.map(img => ({
+              ...img,
+              emailKey: email,
+              url: `${import.meta.env.VITE_BASE_URL}/photos/image-data/${img._id}`,
+              icon: getMarkerIcon(email)
+            }));
+            allImages.push(...emailImages);
+          } catch (innerErr) {
+            console.warn(`Failed to fetch images for ${email}:`, innerErr.message);
+          }
         }
-        setImages(allImages);
+
+        // Filter out images without valid coordinates to prevent map errors
+        const validImages = allImages.filter(img => img.latitude && img.longitude);
+        setImages(validImages);
 
       } catch (err) {
         console.error("Error fetching home images", err);
@@ -114,10 +126,14 @@ const Home = () => {
       try {
         const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`);
         const allEmails = res.data.map(e => e.email.toLowerCase());
+
         if (user?.role === 'admin') {
           setAvailableFilters(['All', ...allEmails]);
         } else {
-          setAvailableFilters(['All', ...allEmails.filter(e => user?.permissions?.includes(e))]);
+          // Filter available options based on user permissions
+          const userPerms = (user?.permissions || []).map(p => p?.toLowerCase());
+          const permittedEmails = allEmails.filter(e => userPerms.includes(e));
+          setAvailableFilters(['All', ...permittedEmails]);
         }
       } catch (e) { console.error(e); }
     };
