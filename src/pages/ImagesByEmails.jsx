@@ -7,7 +7,7 @@ import { IoMdImages } from "react-icons/io";
 
 const ImagesByEmails = () => {
     const location = useLocation();
-    const { user } = useUser();
+    const { user, token } = useUser();
     const navigate = useNavigate();
     const [emails, setEmails] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -16,9 +16,13 @@ const ImagesByEmails = () => {
 
     useEffect(() => {
         const fetchEmails = async () => {
+            if (!token) return; // Wait for token
             try {
                 setLoading(true);
-                const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`, { withCredentials: true });
+                const res = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/image-sources`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                    withCredentials: true
+                });
                 const fetchedEmails = res.data;
                 setEmails(fetchedEmails);
 
@@ -33,7 +37,7 @@ const ImagesByEmails = () => {
             }
         };
         fetchEmails();
-    }, []);
+    }, [token, location.pathname, navigate]);
 
     const filteredEmails = emails.filter(emailObj =>
         emailObj.email.toLowerCase().includes(searchTerm.toLowerCase())
